@@ -1,5 +1,3 @@
-import { env } from "cloudflare:workers";
-
 const DASHSCOPE_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 const QA_MODEL = "qwen3.7-plus";
 
@@ -39,7 +37,7 @@ export async function POST(request: Request) {
     if (transcript.length > 50000) return jsonError("逐字稿过长，请换一段较短的录音。", 413);
 
     const requestKey = request.headers.get("x-dashscope-api-key")?.trim();
-    const apiKey = env.DASHSCOPE_API_KEY?.trim() || requestKey;
+    const apiKey = process.env.DASHSCOPE_API_KEY?.trim() || requestKey;
     if (!apiKey) return jsonError("需要 DashScope API Key 才能回答问题。", 503);
 
     const response = await fetch(DASHSCOPE_ENDPOINT, {

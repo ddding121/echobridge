@@ -1,5 +1,3 @@
-import { env } from "cloudflare:workers";
-
 const MAX_FILE_BYTES = 7 * 1024 * 1024;
 const DASHSCOPE_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 const NOTES_MODEL = "qwen3.7-plus";
@@ -85,7 +83,7 @@ export async function POST(request: Request) {
     if (audio.size > MAX_FILE_BYTES) return jsonError("当前版本支持不超过 7MB 的音频文件。", 413);
 
     const requestKey = request.headers.get("x-dashscope-api-key")?.trim();
-    const apiKey = env.DASHSCOPE_API_KEY?.trim() || requestKey;
+    const apiKey = process.env.DASHSCOPE_API_KEY?.trim() || requestKey;
     if (!apiKey) return jsonError("尚未配置 DashScope API Key。", 503);
 
     const mimeType = audio.type || "audio/mpeg";

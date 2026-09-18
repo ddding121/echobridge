@@ -2,7 +2,7 @@
 
 EchoBridge is an AI-powered accessible classroom assistant for students who are deaf or hard of hearing, non-native speakers, and learners who benefit from structured notes.
 
-**Live demo:** https://echobridge-ai.ramseye260.chatgpt.site
+**Deployment:** Render-ready Node.js application.
 
 ## What it does
 
@@ -22,8 +22,8 @@ Classroom recordings are often difficult to revisit: important explanations are 
 
 ## Tech stack
 
-- TypeScript, React, Vinext, Tailwind CSS
-- Cloudflare Workers-compatible server routes
+- TypeScript, React, Next.js, Tailwind CSS
+- Node.js server routes deployed on Render
 - DashScope `qwen3-asr-flash` for speech recognition
 - DashScope `qwen3.7-plus` for study guides and grounded Q&A
 - Web Audio API for local waveform analysis and long-audio segmentation
