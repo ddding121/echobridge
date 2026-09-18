@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Accessibility, AudioLines, BookOpenText, CheckCircle2, ChevronRight, CircleHelp, Contrast, Download, FileAudio, Focus, Globe2, Headphones, ListChecks, LoaderCircle, MessageCircleMore, Mic2, Pause, Play, Plus, Radio, RotateCcw, Sparkles, Square, Trash2, Type, Upload, Volume2, X } from "lucide-react";
