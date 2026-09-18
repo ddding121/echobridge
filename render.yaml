@@ -1,9 +1,9 @@
-services:
+﻿services:
   - type: web
     name: echobridge
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    buildCommand: npm install -g pnpm@10.15.1 && pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm start
     healthCheckPath: /
     envVars:
@@ -11,3 +11,4 @@ services:
         value: 22.13.0
       - key: DASHSCOPE_API_KEY
         sync: false
+
