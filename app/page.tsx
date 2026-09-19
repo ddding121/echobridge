@@ -10,7 +10,9 @@ import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 const bars = [28,42,64,38,74,55,88,52,36,68,45,82,58,94,46,66,38,76,54,34,70,44,86,62,40,72,50,80,36,64,48,90,56,42,76,52,68,34,60,46];
 const MAX_UPLOAD_BYTES = 120 * 1024 * 1024;
 const MAX_CLASS_SECONDS = 90 * 60;
-const CHUNK_SECONDS = 180;
+const CHUNK_SECONDS = 90;
+const TRANSCRIBE_RETRIES = 3;
+const TRANSCRIBE_TIMEOUT_MS = 180000;
 const OUTPUT_SAMPLE_RATE = 16000;
 const RECENT_CLASSES_KEY = "echobridge-recent-classes-v1";
 type StudyGuide = {
@@ -309,16 +311,30 @@ export default function Home() {
       const chunkCount=Math.ceil(decoded.duration/CHUNK_SECONDS);
       const texts:string[]=[];
       for(let index=0;index<chunkCount;index++) {
-        setProcessingStatus(`正在转写第 ${index+1}/${chunkCount} 段…`);
         const start=index*CHUNK_SECONDS;
         const blob=encodeWavChunk(decoded,start,Math.min(decoded.duration,start+CHUNK_SECONDS));
-        const body=new FormData();
-        body.append("file",blob,`${selectedFile.name}-part-${index+1}.wav`);
-        body.append("createNotes","false");
-        const response=await fetch("/api/transcribe",{method:"POST",headers,body});
-        const result=await response.json() as {text?:string;error?:string};
-        if(!response.ok||!result.text) throw new Error(result.error||`第 ${index+1} 段转写失败，请重试。`);
-        texts.push(result.text);
+        let chunkText="";
+        let lastError:Error|null=null;
+        for(let attempt=1;attempt<=TRANSCRIBE_RETRIES;attempt++) {
+          setProcessingStatus(`正在转写第 ${index+1}/${chunkCount} 段${attempt>1?`（第 ${attempt} 次尝试）`:""}…`);
+          const body=new FormData();
+          body.append("file",blob,`${selectedFile.name}-part-${index+1}.wav`);
+          body.append("createNotes","false");
+          try {
+            const response=await fetch("/api/transcribe",{method:"POST",headers,body,signal:AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS)});
+            const raw=await response.text();
+            let result:{text?:string;error?:string}={};
+            try { result=JSON.parse(raw) as {text?:string;error?:string}; } catch { result={error:raw||"服务未返回有效结果。"}; }
+            if(!response.ok||!result.text) throw new Error(result.error||`第 ${index+1} 段转写失败。`);
+            chunkText=result.text;
+            break;
+          } catch(error) {
+            lastError=error instanceof Error?error:new Error("网络连接中断。");
+            if(attempt<TRANSCRIBE_RETRIES) await new Promise(resolve=>window.setTimeout(resolve,attempt*1200));
+          }
+        }
+        if(!chunkText) throw new Error(`第 ${index+1}/${chunkCount} 段连续 ${TRANSCRIBE_RETRIES} 次失败：${lastError?.message||"网络连接中断"}`);
+        texts.push(chunkText);
       }
       const fullTranscript=texts.join("\n\n");
       setUploadedTranscript(fullTranscript);

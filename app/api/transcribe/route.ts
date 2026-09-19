@@ -1,4 +1,4 @@
-const MAX_FILE_BYTES = 7 * 1024 * 1024;
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const DASHSCOPE_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 const NOTES_MODEL = "qwen3.7-plus";
 
@@ -74,13 +74,17 @@ async function createStudyGuide(text: string, apiKey: string) {
 }
 
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  const startedAt = Date.now();
+  console.info(`[asr:${requestId}] request received`);
   try {
     const formData = await request.formData();
     const audio = formData.get("file");
     const shouldCreateNotes = formData.get("createNotes") !== "false";
     if (!(audio instanceof File)) return jsonError("没有收到音频文件。", 400);
     if (!audio.size) return jsonError("音频文件为空。", 400);
-    if (audio.size > MAX_FILE_BYTES) return jsonError("当前版本支持不超过 7MB 的音频文件。", 413);
+    console.info(`[asr:${requestId}] file parsed name=${audio.name} bytes=${audio.size} type=${audio.type||"unknown"}`);
+    if (audio.size > MAX_FILE_BYTES) return jsonError("单段音频超过 4MB，请缩短分段后重试。", 413);
 
     const requestKey = request.headers.get("x-dashscope-api-key")?.trim();
     const apiKey = process.env.DASHSCOPE_API_KEY?.trim() || requestKey;
@@ -88,6 +92,7 @@ export async function POST(request: Request) {
 
     const mimeType = audio.type || "audio/mpeg";
     const base64 = toBase64(await audio.arrayBuffer());
+    console.info(`[asr:${requestId}] calling DashScope model=qwen3-asr-flash base64Chars=${base64.length}`);
     const response = await fetch(DASHSCOPE_ENDPOINT, {
       method: "POST",
       headers: {
@@ -110,21 +115,27 @@ export async function POST(request: Request) {
         stream: false,
         asr_options: { language: "zh", enable_itn: true },
       }),
+      signal: AbortSignal.timeout(150000),
     });
 
-    const payload = (await response.json()) as {
+    const rawPayload = await response.text();
+    let payload: {
       choices?: Array<{ message?: { content?: string } }>;
       error?: { message?: string };
       message?: string;
-    };
+    } = {};
+    try { payload = JSON.parse(rawPayload) as typeof payload; } catch { payload = { message: rawPayload.slice(0, 500) }; }
+    console.info(`[asr:${requestId}] DashScope responded status=${response.status} elapsedMs=${Date.now()-startedAt}`);
     if (!response.ok) {
       const detail = payload.error?.message || payload.message;
+      console.error(`[asr:${requestId}] DashScope error status=${response.status} detail=${detail||"unknown"}`);
       return jsonError(detail ? `语音服务返回错误：${detail}` : "语音服务暂时不可用。", response.status);
     }
 
     const text = payload.choices?.[0]?.message?.content?.trim();
     if (!text) return jsonError("识别完成，但没有返回可用文字。", 502);
     const studyGuide = shouldCreateNotes ? await createStudyGuide(text, apiKey) : null;
+    console.info(`[asr:${requestId}] completed chars=${text.length} elapsedMs=${Date.now()-startedAt}`);
     return Response.json({
       text,
       model: "qwen3-asr-flash",
@@ -133,7 +144,8 @@ export async function POST(request: Request) {
       studyGuide,
       studyGuideWarning: shouldCreateNotes && !studyGuide ? "逐字稿已生成，但AI笔记暂时整理失败。" : undefined,
     });
-  } catch {
+  } catch (error) {
+    console.error(`[asr:${requestId}] failed elapsedMs=${Date.now()-startedAt}`,error);
     return jsonError("处理音频时出现异常，请稍后重试。", 500);
   }
 }
